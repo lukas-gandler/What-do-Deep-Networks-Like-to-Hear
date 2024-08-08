@@ -19,7 +19,7 @@ class MNIST_Autoencoder(nn.Module):
 
             nn.Flatten(),
             nn.Linear(3200, 10),
-            nn.Softmax(),
+            nn.Softmax(dim=1),
         )
 
         self.decoder = nn.Sequential(
