@@ -1,8 +1,8 @@
 import torch
 
-from utils.dataloading import load_mnist
-from utils.trainer import Trainer
-from models.autoencoder.MNIST_autoencoder import MNIST_Autoencoder
+from utils import load_mnist
+from utils import Trainer
+from models import MNIST_Autoencoder
 
 def main():
     # Get DEVICE

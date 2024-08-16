@@ -4,9 +4,9 @@ import torchvision
 import numpy as np
 import matplotlib.pyplot as plt
 
-from utils.dataloading import load_mnist
-from models.autoencoder.MNIST_autoencoder import MNIST_Autoencoder
-from utils.checkpointing import load_model
+from models import MNIST_Autoencoder
+from utils import load_mnist
+from utils import load_model
 
 NUM_ROWS = 8
 

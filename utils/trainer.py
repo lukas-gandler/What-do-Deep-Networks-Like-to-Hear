@@ -9,7 +9,7 @@ from typing import Optional
 from torch.utils.data import DataLoader
 from torch.optim.lr_scheduler import LRScheduler
 
-from utils.checkpointing import save_checkpoint, load_checkpoint
+from .checkpointing import save_checkpoint, load_checkpoint
 
 class Trainer:
     def __init__(self, save_dir: str = 'checkpoints', save_interval: int=10, device: str = 'cpu', train_autoencoder=False):
