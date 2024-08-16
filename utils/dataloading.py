@@ -10,7 +10,8 @@ def load_mnist(batch_size: int=32, num_workers: int=1) -> tuple[DataLoader, Data
     """
 
     transform = transforms.Compose([
-        transforms.ToTensor()
+        transforms.ToTensor(),
+        transforms.Normalize((0.1307,), (0.3081,)),
     ])
 
     train_dataset = datasets.MNIST(root='data', download=True, train=True, transform=transform)

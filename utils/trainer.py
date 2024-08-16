@@ -79,12 +79,12 @@ class Trainer:
             loss.backward()
             optimizer.step()
 
-            progress_bar.set_description(f'Epoch {epoch+1:02d} - Training loss:   {(running_loss / idx):.4f}')
+            progress_bar.set_description(f'Epoch {epoch+1:02d} - Training loss:   {running_loss:.4f}')
 
         if scheduler is not None:
             scheduler.step()
 
-        return running_loss / len(train_loader)
+        return running_loss
 
     def _validation_loop(self, epoch: int, model: nn.Module, validation_loader: DataLoader, criterion: nn.Module) -> float:
         model.eval()
@@ -99,6 +99,6 @@ class Trainer:
             loss = criterion(outputs, inputs) if self.train_autoencoder else criterion(outputs, labels)
             running_loss += loss.item()
 
-            progress_bar.set_description(f'           Validation loss: {(running_loss / idx):.4f}')
+            progress_bar.set_description(f'           Validation loss: {running_loss:.4f}')
 
-        return running_loss / len(validation_loader)
+        return running_loss
