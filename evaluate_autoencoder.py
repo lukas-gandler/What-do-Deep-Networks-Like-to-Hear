@@ -4,27 +4,34 @@ import torchvision
 import numpy as np
 import matplotlib.pyplot as plt
 
-from models import MNIST_Autoencoder
-from utils import load_mnist
+from models import CIFAR10_Autoencoder, CIFAR10_Autoencoder_MaxPooling, CIFAR10_CNN
+from models import CombinedPipeline
+from utils import load_CIFAR10
 from utils import load_model
 
-NUM_ROWS = 8
+NUM_ROWS = 4
 
 def main():
-    device = 'cuda' if torch.cuda.is_available() else 'cpu'
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     print(f'=> Using device {device}')
 
     print(f'=> Loading dataset')
-    train_loader, validation_loader = load_mnist(batch_size=NUM_ROWS**2)
+    train_loader, validation_loader = load_CIFAR10(batch_size=NUM_ROWS**2)
 
     print(f'=> Building model')
-    autoencoder = load_model('checkpoints/best_model.pth', MNIST_Autoencoder().to(device))
+    autoencoder = CIFAR10_Autoencoder()
+    # autoencoder = load_model('models/pretrained_weights/CIFAR10_AE_baseline_maxpooling_bigger_bn.pth', autoencoder.to(device))
+    classifier = CIFAR10_CNN()
+
+    pipeline = CombinedPipeline(autoencoder=autoencoder, classifier=classifier)
+    pipeline = load_model('checkpoints/final_model.pth', pipeline.to(device))
 
     print(f'=> Running model')
-    images, _ = next(iter(train_loader))
+    images, labels = next(iter(train_loader))
     original_img_grid = torchvision.utils.make_grid(images, nrow=NUM_ROWS, padding=2, normalize=True)
 
-    rec_images = autoencoder.forward(images.to(device)).cpu()
+    rec_images = pipeline.autoencoder.forward(images.to(device)).cpu()
+    # rec_images = autoencoder.forward(images.to(device)).cpu()
     rec_img_grid = torchvision.utils.make_grid(rec_images, nrow=NUM_ROWS, padding=2, normalize=True)
 
     print('=> Plotting results')

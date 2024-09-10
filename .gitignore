@@ -162,3 +162,5 @@ cython_debug/
 #.idea/
 /data/
 /checkpoints/
+/models/autoencoder/pretrained/
+/models/pretrained_weights/

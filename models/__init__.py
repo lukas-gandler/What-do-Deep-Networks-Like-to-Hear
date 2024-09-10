@@ -1,1 +1,8 @@
+from .combined_pipeline import CombinedPipeline
+
 from .autoencoder.MNIST_autoencoder import MNIST_Autoencoder
+from .autoencoder.CIFAR10_autoencoder import CIFAR10_Autoencoder, CIFAR10_Autoencoder_MaxPooling
+from .autoencoder.ImageNet_autoencoder import initialize_VGGAutoencoder, initialize_pretrained_VGGAutoencoder
+
+from .classifier.ImageNet_Resnets import load_pretrained_resnet50
+from .classifier.CIFAR10_CNN import CIFAR10_CNN
