@@ -34,7 +34,7 @@ def load_checkpoint(path: str, model: nn.Module, optimizer: Optimizer, scheduler
 
     return model, optimizer, scheduler, epoch, training_losses, validation_losses
 
-def load_model(path:str, model: nn.Module) -> nn.Module:
+def load_model(path:str, model: nn.Module, checkpoint_is_dict: bool=True) -> nn.Module:
     checkpoints = torch.load(path)
-    model.load_state_dict(checkpoints['model_state_dict'])
+    model.load_state_dict(checkpoints['model_state_dict'] if checkpoint_is_dict else checkpoints)
     return model

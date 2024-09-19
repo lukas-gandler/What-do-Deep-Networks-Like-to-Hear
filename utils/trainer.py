@@ -8,7 +8,7 @@ from tqdm import tqdm
 from typing import Optional
 
 from torch.utils.data import DataLoader
-from torch.optim.lr_scheduler import LRScheduler
+from torch.optim.lr_scheduler import LRScheduler, ReduceLROnPlateau
 
 from .checkpointing import save_checkpoint, load_checkpoint
 from .number_of_correct import number_of_correct
@@ -45,13 +45,22 @@ class Trainer:
             train_losses, val_losses = [], []
             start_epoch = 0
 
+            print(f'=> Initial testing of the model')
+            val_loss = self._validation_loop(0, model, validation_loader, criterion)
+            val_losses.append(val_loss)
+
+
         print(f'=> Starting training for {num_epochs} epochs', f'starting from {start_epoch}' if start_epoch > 0 else '')
         for epoch in range(start_epoch, num_epochs):
-            train_loss = self._training_loop(epoch, model, train_loader, optimizer, criterion, scheduler)
+            train_loss = self._training_loop(epoch, model, train_loader, optimizer, criterion)
             train_losses.append(train_loss)
 
             val_loss = self._validation_loop(epoch, model, validation_loader, criterion)
             val_losses.append(val_loss)
+
+            # Step with scheduler
+            if scheduler is not None:
+                scheduler.step(val_loss) if isinstance(scheduler, ReduceLROnPlateau) else scheduler.step()
 
             # Save in intervals
             if (epoch + 1) % self.save_interval == 0:
@@ -68,7 +77,7 @@ class Trainer:
         save_checkpoint(checkpoint_path, num_epochs, train_losses, val_losses, model, optimizer, scheduler)
 
     def _training_loop(self, epoch: int, model: nn.Module, train_loader: DataLoader,
-                       optimizer: optim.Optimizer, criterion: nn.Module, scheduler: LRScheduler|None) -> float:
+                       optimizer: optim.Optimizer, criterion: nn.Module) -> float:
         model.train()
         running_loss = 0.0
 
@@ -86,9 +95,6 @@ class Trainer:
             optimizer.step()
 
             progress_bar.set_description(f'Epoch {epoch+1:02d} - Training loss:   {(running_loss / idx):.4f}')
-
-        if scheduler is not None:
-            scheduler.step()
 
         return running_loss
 

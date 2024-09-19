@@ -1,6 +1,7 @@
 import torch
 import torch.nn as nn
 
+from typing import Optional
 
 def _freeze_weights(network: nn.Module):
     for param in network.parameters():
@@ -8,8 +9,10 @@ def _freeze_weights(network: nn.Module):
 
 
 class CombinedPipeline(nn.Module):
-    def __init__(self, autoencoder: nn.Module, classifier: nn.Module, finetune_encoder: bool=False):
+    def __init__(self, autoencoder: nn.Module, classifier: nn.Module, finetune_encoder: bool=False,
+                 post_ae_transform: Optional[nn.Module]=None):
         super(CombinedPipeline, self).__init__()
+        self.post_ae_transform = post_ae_transform
 
         self.autoencoder = autoencoder
         if not finetune_encoder:
@@ -21,5 +24,7 @@ class CombinedPipeline(nn.Module):
 
     def forward(self, input: torch.Tensor) -> torch.Tensor:
         reconstructed_input = self.autoencoder(input)
+        reconstructed_input = self.post_ae_transform(reconstructed_input) if self.post_ae_transform is not None else reconstructed_input
+
         predicted_labels = self.classifier(reconstructed_input)
         return predicted_labels
