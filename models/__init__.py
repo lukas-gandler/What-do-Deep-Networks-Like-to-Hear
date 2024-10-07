@@ -8,3 +8,6 @@ from .autoencoder.ArchiSound_audio_autoencoder import AudioAutoencoder
 from .classifier.ImageNet_Resnets import load_pretrained_resnet50
 from .classifier.CIFAR10_CNN import CIFAR10_CNN
 from .classifier.SPEECHCOMMANDS_M5 import M5
+
+from .classifier.ESC50_MobileNet import get_mobilenet
+from .classifier.ESC50_Dynamic_MobileNet import get_dynamic_mobilenet

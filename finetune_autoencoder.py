@@ -1,14 +1,9 @@
 import torch
-import torchaudio.transforms
-import torchvision
-
-import numpy as np
-import matplotlib.pyplot as plt
-
-from tqdm import tqdm
+import torch.nn.functional as F
 
 from models import *
 from utils import *
+from dataloading import *
 
 def main():
     # Get DEVICE
@@ -17,41 +12,39 @@ def main():
 
     # Get DATASET
     print(f'=> Loading dataset')
-    # train_loader, _  = load_SPEECHCOMMANDS_h5(batch_size=16, num_workers=8, num_channels=2, prefetch_factor=2)
-    train_loader, test_loader = load_SPEECHCOMMANDS(batch_size=16, num_workers=8, num_channels=2, prefetch_factor=2)
+    train_loader, test_loader = load_ESC50(batch_size=1, num_workers=2, load_mono=False)
 
     # Instantiate MODEL
     print(f'=> Building models and assembling pipeline')
     autoencoder = AudioAutoencoder(reduce_output=True).to(device)
-    # autoencoder = load_model('models/pretrained_weights/CIFAR10_AE_baseline_deconvs.pth', autoencoder)
-
-    classifier = M5().to(device)
-    classifier = load_model('models/pretrained_weights/SPEECHCOMMANDS_M5_acc_92.pth', classifier, checkpoint_is_dict=False)
+    # classifier = get_mobilenet(checkpoint='models/pretrained_weights/ESC50_mn10_esc50_epoch_79_acc_960.pt').to(device)
+    classifier = get_dynamic_mobilenet(checkpoint='models/pretrained_weights/ESC50_dymn10_esc50_epoch_79_acc_962.pt').to(device)
 
     # Assemble the autoencoder and classifier into the combined pipeline
-    post_transform = torchaudio.transforms.Resample(orig_freq=16_000, new_freq=8_000).to(device)
-    pipeline = CombinedPipeline(autoencoder=autoencoder, classifier=classifier, finetune_encoder=False, post_ae_transform=post_transform)
+    # post_transform = torchaudio.transforms.Resample(orig_freq=16_000, new_freq=8_000).to(device)
+    mel_transformation = MelTransform().to(device)
+    pipeline = CombinedPipeline(autoencoder=autoencoder, classifier=classifier, finetune_encoder=False, post_ae_transform=mel_transformation)
 
     num_params = sum(param.numel() for param in pipeline.parameters())
     print(f'=> Successfully finished assembling pipeline - Total model params: {num_params:,}')
 
     # Define OPTIMIZER, LOSS-CRITERION and LR-SCHEDULER
-    optimizer = torch.optim.Adam(pipeline.parameters(), lr=3e-4, weight_decay=1e-5)
-    criterion = torch.nn.NLLLoss()
+    optimizer = torch.optim.Adam(pipeline.parameters(), lr=6e-5, weight_decay=1e-5)
+    criterion = lambda prediction, target: F.cross_entropy(prediction, target, reduction='none')  # when we want to use Mix-Up we have to use one-hot vectors as targets
     scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, patience=3)
 
     # Create MODEL TRAINER and TRAIN MODEL
-    training_configs = {'num_epochs': 20,
+    training_configs = {'num_epochs': 80,
                         'train_loader': train_loader,
                         'validation_loader': test_loader,
                         'model': pipeline,
                         'optimizer': optimizer,
                         'criterion': criterion,
                         'scheduler': scheduler,
-                        'resume': 'checkpoints/checkpoint_epoch_5_losses_2427.2948_229.9855.pth',
+                        'resume': None,
                         }
 
-    model_trainer = Trainer(save_interval=1, device=device, unsupervised_learning=False)
+    model_trainer = Trainer(save_interval=50, device=device, unsupervised_learning=False)
     model_trainer.train(**training_configs)
     print(f'=> Fine-tuning finished.')
 

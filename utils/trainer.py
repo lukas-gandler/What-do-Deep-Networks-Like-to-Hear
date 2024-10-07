@@ -1,11 +1,13 @@
 import os
 
+import numpy as np
 import torch
 import torch.nn as nn
 import torch.optim as optim
 
 from tqdm import tqdm
 from typing import Optional
+from sklearn import metrics
 
 from torch.utils.data import DataLoader
 from torch.optim.lr_scheduler import LRScheduler, ReduceLROnPlateau
@@ -79,7 +81,7 @@ class Trainer:
     def _training_loop(self, epoch: int, model: nn.Module, train_loader: DataLoader,
                        optimizer: optim.Optimizer, criterion: nn.Module) -> float:
         model.train()
-        running_loss = 0.0
+        losses = []
 
         progress_bar = tqdm(train_loader)
         for idx, (inputs, labels) in enumerate(progress_bar, 1):
@@ -88,22 +90,24 @@ class Trainer:
 
             outputs = model(inputs)
             loss = criterion(outputs, inputs) if self.train_autoencoder else criterion(outputs, labels)
-            running_loss += loss.item()
+            losses.append(loss.detach().cpu().numpy())
 
             optimizer.zero_grad()
             loss.backward()
             optimizer.step()
 
-            progress_bar.set_description(f'Epoch {epoch+1:02d} - Training loss:   {(running_loss / idx):.4f}')
+            progress_bar.set_description(f'Epoch {epoch+1:02d} - Training loss: {np.stack(losses).mean():.4f}')
 
-        return running_loss
+        losses = np.stack(losses)
+        return losses.mean()
 
+    @torch.no_grad()
     def _validation_loop(self, epoch: int, model: nn.Module, validation_loader: DataLoader, criterion: nn.Module) -> float:
         model.eval()
-        running_loss = 0.0
+        losses = []
 
-        correct = 0
-        num_samples = 0
+        targets = []
+        predictions = []
 
         progress_bar = tqdm(validation_loader)
         for idx, (inputs, labels) in enumerate(progress_bar, 1):
@@ -112,13 +116,16 @@ class Trainer:
 
             outputs = model(inputs)
             loss = criterion(outputs, inputs) if self.train_autoencoder else criterion(outputs, labels)
-            running_loss += loss.item()
+            losses.append(loss.cpu().numpy())
 
             if self.train_autoencoder:
-                progress_bar.set_description(f'-- Validation loss: {(running_loss / idx):.4f}')
+                progress_bar.set_description(f'-- Validation loss: {np.stack(losses).mean():.4f}')
             else:
-                correct += number_of_correct(predictions=outputs, targets=labels)
-                num_samples += inputs.shape[0]
-                progress_bar.set_description(f'-- Validation loss: {(running_loss / idx):.4f} | Accuracy: {correct}/{num_samples} ({100. * correct / num_samples:.0f}%)')
+                targets.append(labels.cpu().numpy())
+                predictions.append(outputs.float().cpu().numpy())
 
-        return running_loss
+                accuracy = metrics.accuracy_score(np.concatenate(targets).argmax(axis=1), np.concatenate(predictions).argmax(axis=1))
+                progress_bar.set_description(f'-- Validation loss: {np.stack(losses).mean():.4f} | Accuracy: {accuracy:.4f}%')
+
+        losses = np.stack(losses)
+        return losses.mean()
