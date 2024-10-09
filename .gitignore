@@ -164,3 +164,4 @@ cython_debug/
 /checkpoints/
 /models/autoencoder/pretrained/
 /models/pretrained_weights/
+/experiment-results/

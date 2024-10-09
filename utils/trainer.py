@@ -6,7 +6,7 @@ import torch.nn as nn
 import torch.optim as optim
 
 from tqdm import tqdm
-from typing import Optional
+from typing import Optional, Tuple
 from sklearn import metrics
 
 from torch.utils.data import DataLoader
@@ -41,15 +41,16 @@ class Trainer:
         if resume is not None:
             print(f'=> resuming from checkpoint {resume}')
 
-            model, optimizer, scheduler, start_epoch, train_losses, val_losses = load_checkpoint(resume, model, optimizer, scheduler)
+            model, optimizer, scheduler, start_epoch, train_losses, val_losses, accuracies = load_checkpoint(resume, model, optimizer, scheduler)
             start_epoch = start_epoch + 1
         else:
-            train_losses, val_losses = [], []
+            train_losses, val_losses, accuracies = [], [], []
             start_epoch = 0
 
             print(f'=> Initial testing of the model')
-            val_loss = self._validation_loop(0, model, validation_loader, criterion)
+            val_loss, accuracy = self._validation_loop(0, model, validation_loader, criterion)
             val_losses.append(val_loss)
+            accuracies.append(accuracy)
 
 
         print(f'=> Starting training for {num_epochs} epochs', f'starting from {start_epoch}' if start_epoch > 0 else '')
@@ -57,8 +58,9 @@ class Trainer:
             train_loss = self._training_loop(epoch, model, train_loader, optimizer, criterion)
             train_losses.append(train_loss)
 
-            val_loss = self._validation_loop(epoch, model, validation_loader, criterion)
+            val_loss, accuracy = self._validation_loop(epoch, model, validation_loader, criterion)
             val_losses.append(val_loss)
+            accuracies.append(accuracy)
 
             # Step with scheduler
             if scheduler is not None:
@@ -66,20 +68,20 @@ class Trainer:
 
             # Save in intervals
             if (epoch + 1) % self.save_interval == 0:
-                checkpoint_path = os.path.join(self.save_dir, f'checkpoint_epoch_{epoch}_losses_{train_loss:.4f}_{val_loss:.4f}.pth')
-                save_checkpoint(checkpoint_path, epoch, train_losses, val_losses, model, optimizer, scheduler)
+                checkpoint_path = os.path.join(self.save_dir, f'checkpoint_epoch_{epoch}_losses_{train_loss:.4f}_{val_loss:.4f}_acc_{accuracy}.pth')
+                save_checkpoint(checkpoint_path, epoch, train_losses, val_losses, accuracies, model, optimizer, scheduler)
 
             # Save best model
             if val_loss <= min(val_losses):
                 checkpoint_path = os.path.join(self.save_dir, f'best_model.pth')
-                save_checkpoint(checkpoint_path, epoch, train_losses, val_losses, model, optimizer, scheduler)
+                save_checkpoint(checkpoint_path, epoch, train_losses, val_losses, accuracies, model, optimizer, scheduler)
 
         # save final model
         checkpoint_path = os.path.join(self.save_dir, f'final_model.pth')
-        save_checkpoint(checkpoint_path, num_epochs, train_losses, val_losses, model, optimizer, scheduler)
+        save_checkpoint(checkpoint_path, num_epochs, train_losses, val_losses, accuracies, model, optimizer, scheduler)
 
-    def _training_loop(self, epoch: int, model: nn.Module, train_loader: DataLoader,
-                       optimizer: optim.Optimizer, criterion: nn.Module) -> float:
+
+    def _training_loop(self, epoch: int, model: nn.Module, train_loader: DataLoader, optimizer: optim.Optimizer, criterion: nn.Module) -> float:
         model.train()
         losses = []
 
@@ -93,7 +95,7 @@ class Trainer:
             losses.append(loss.detach().cpu().numpy())
 
             optimizer.zero_grad()
-            loss.backward()
+            loss.mean().backward()
             optimizer.step()
 
             progress_bar.set_description(f'Epoch {epoch+1:02d} - Training loss: {np.stack(losses).mean():.4f}')
@@ -101,8 +103,9 @@ class Trainer:
         losses = np.stack(losses)
         return losses.mean()
 
+
     @torch.no_grad()
-    def _validation_loop(self, epoch: int, model: nn.Module, validation_loader: DataLoader, criterion: nn.Module) -> float:
+    def _validation_loop(self, epoch: int, model: nn.Module, validation_loader: DataLoader, criterion: nn.Module) -> Tuple[float, float]:
         model.eval()
         losses = []
 
@@ -128,4 +131,6 @@ class Trainer:
                 progress_bar.set_description(f'-- Validation loss: {np.stack(losses).mean():.4f} | Accuracy: {accuracy:.4f}%')
 
         losses = np.stack(losses)
-        return losses.mean()
+        final_accuracy = metrics.accuracy_score(np.concatenate(targets).argmax(axis=1), np.concatenate(predictions).argmax(axis=1))
+
+        return losses.mean(), final_accuracy

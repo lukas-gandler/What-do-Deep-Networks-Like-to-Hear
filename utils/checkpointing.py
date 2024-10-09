@@ -8,7 +8,7 @@ from torch.optim.lr_scheduler import LRScheduler
 import warnings
 warnings.simplefilter(action='ignore', category=FutureWarning)  # Using torch.save with weights_only=False gives a warning, we ignore that for now
 
-def save_checkpoint(path: str, epoch:int, training_losses: list[float], validation_losses: list[float],
+def save_checkpoint(path: str, epoch:int, training_losses: list[float], validation_losses: list[float], accuracies: list[float],
                     model: nn.Module, optimizer: Optimizer, scheduler: Optional[LRScheduler]=None):
     torch.save({
         'epoch': epoch,
@@ -17,9 +17,10 @@ def save_checkpoint(path: str, epoch:int, training_losses: list[float], validati
         'scheduler_state_dict': scheduler.state_dict() if scheduler is not None else None,
         'training_losses': training_losses,
         'validation_losses': validation_losses,
+        'accuracies': accuracies,
     }, path)
 
-def load_checkpoint(path: str, model: nn.Module, optimizer: Optimizer, scheduler: Optional[LRScheduler]=None) -> tuple[nn.Module, Optimizer, Optional[LRScheduler], int, list[float], list[float]]:
+def load_checkpoint(path: str, model: nn.Module, optimizer: Optimizer, scheduler: Optional[LRScheduler]=None) -> tuple[nn.Module, Optimizer, Optional[LRScheduler], int, list[float], list[float], list[float]]:
     checkpoint = torch.load(path)
 
     model.load_state_dict(checkpoint['model_state_dict'])
@@ -31,8 +32,9 @@ def load_checkpoint(path: str, model: nn.Module, optimizer: Optimizer, scheduler
     epoch = checkpoint['epoch']
     training_losses = checkpoint['training_losses']
     validation_losses = checkpoint['validation_losses']
+    accuracies = checkpoint['accuracies']
 
-    return model, optimizer, scheduler, epoch, training_losses, validation_losses
+    return model, optimizer, scheduler, epoch, training_losses, validation_losses, accuracies
 
 def load_model(path:str, model: nn.Module, checkpoint_is_dict: bool=True) -> nn.Module:
     checkpoints = torch.load(path)

@@ -12,16 +12,15 @@ def main():
 
     # Get DATASET
     print(f'=> Loading dataset')
-    train_loader, test_loader = load_ESC50(batch_size=1, num_workers=2, load_mono=False)
+    train_loader, test_loader = load_ESC50(batch_size=4, num_workers=4, load_mono=False)
 
     # Instantiate MODEL
     print(f'=> Building models and assembling pipeline')
     autoencoder = AudioAutoencoder(reduce_output=True).to(device)
-    # classifier = get_mobilenet(checkpoint='models/pretrained_weights/ESC50_mn10_esc50_epoch_79_acc_960.pt').to(device)
-    classifier = get_dynamic_mobilenet(checkpoint='models/pretrained_weights/ESC50_dymn10_esc50_epoch_79_acc_962.pt').to(device)
+    classifier = get_mobilenet(checkpoint='models/pretrained_weights/ESC50_mn10_esc50_epoch_79_acc_960.pt').to(device)
+    # classifier = get_dynamic_mobilenet(checkpoint='models/pretrained_weights/ESC50_dymn10_esc50_epoch_79_acc_962.pt').to(device)
 
     # Assemble the autoencoder and classifier into the combined pipeline
-    # post_transform = torchaudio.transforms.Resample(orig_freq=16_000, new_freq=8_000).to(device)
     mel_transformation = MelTransform().to(device)
     pipeline = CombinedPipeline(autoencoder=autoencoder, classifier=classifier, finetune_encoder=False, post_ae_transform=mel_transformation)
 
@@ -29,12 +28,12 @@ def main():
     print(f'=> Successfully finished assembling pipeline - Total model params: {num_params:,}')
 
     # Define OPTIMIZER, LOSS-CRITERION and LR-SCHEDULER
-    optimizer = torch.optim.Adam(pipeline.parameters(), lr=6e-5, weight_decay=1e-5)
+    optimizer = torch.optim.Adam(pipeline.parameters(), lr=3e-4, weight_decay=1e-5)
     criterion = lambda prediction, target: F.cross_entropy(prediction, target, reduction='none')  # when we want to use Mix-Up we have to use one-hot vectors as targets
-    scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, patience=3)
+    scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, patience=5)
 
     # Create MODEL TRAINER and TRAIN MODEL
-    training_configs = {'num_epochs': 80,
+    training_configs = {'num_epochs': 200,
                         'train_loader': train_loader,
                         'validation_loader': test_loader,
                         'model': pipeline,
@@ -44,14 +43,9 @@ def main():
                         'resume': None,
                         }
 
-    model_trainer = Trainer(save_interval=50, device=device, unsupervised_learning=False)
+    model_trainer = Trainer(save_interval=5, device=device, unsupervised_learning=False)
     model_trainer.train(**training_configs)
     print(f'=> Fine-tuning finished.')
-
-    # Fine-tuned ACCURACY
-    # train_accuracy_pipeline = top_one_accuracy(pipeline, train_loader, device)
-    # test_accuracy_pipeline = top_one_accuracy(pipeline, test_loader, device)
-    # print(f'=> Accuracy of fine-tuned pipeline - Train {train_accuracy_pipeline:.3f} | Test {test_accuracy_pipeline:.3f}')
 
     print(f'=> Trained models saved under {model_trainer.save_dir}/')
     print(f'=> Done')
