@@ -28,7 +28,8 @@ def main():
     print(f'=> Successfully finished assembling pipeline - Total model params: {num_params:,}')
 
     # Define OPTIMIZER, LOSS-CRITERION and LR-SCHEDULER
-    optimizer = torch.optim.Adam(pipeline.parameters(), lr=3e-4, weight_decay=1e-5)
+    print(f'=> lr: {3e-5}')
+    optimizer = torch.optim.Adam(pipeline.parameters(), lr=3e-5, weight_decay=1e-5)
     criterion = lambda prediction, target: F.cross_entropy(prediction, target, reduction='none')  # when we want to use Mix-Up we have to use one-hot vectors as targets
     scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, patience=5)
 

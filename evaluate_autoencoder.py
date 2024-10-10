@@ -4,10 +4,9 @@ import torchvision
 import numpy as np
 import matplotlib.pyplot as plt
 
-from models import CIFAR10_Autoencoder, CIFAR10_Autoencoder_MaxPooling, CIFAR10_CNN
-from models import CombinedPipeline
-from utils import load_CIFAR10
-from utils import load_model
+from models import *
+from dataloading import *
+from utils import *
 
 NUM_ROWS = 4
 
