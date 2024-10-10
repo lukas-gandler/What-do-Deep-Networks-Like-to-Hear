@@ -107,10 +107,7 @@ class Trainer:
     @torch.no_grad()
     def _validation_loop(self, epoch: int, model: nn.Module, validation_loader: DataLoader, criterion: nn.Module) -> Tuple[float, float]:
         model.eval()
-        losses = []
-
-        targets = []
-        predictions = []
+        losses, targets, predictions = [], [], []
 
         progress_bar = tqdm(validation_loader)
         for idx, (inputs, labels) in enumerate(progress_bar, 1):

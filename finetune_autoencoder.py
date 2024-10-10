@@ -28,13 +28,13 @@ def main():
     print(f'=> Successfully finished assembling pipeline - Total model params: {num_params:,}')
 
     # Define OPTIMIZER, LOSS-CRITERION and LR-SCHEDULER
-    print(f'=> lr: {3e-5}')
+    num_epochs = 200
     optimizer = torch.optim.Adam(pipeline.parameters(), lr=3e-5, weight_decay=1e-5)
     criterion = lambda prediction, target: F.cross_entropy(prediction, target, reduction='none')  # when we want to use Mix-Up we have to use one-hot vectors as targets
-    scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, patience=5)
+    scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=num_epochs)
 
     # Create MODEL TRAINER and TRAIN MODEL
-    training_configs = {'num_epochs': 200,
+    training_configs = {'num_epochs': num_epochs,
                         'train_loader': train_loader,
                         'validation_loader': test_loader,
                         'model': pipeline,

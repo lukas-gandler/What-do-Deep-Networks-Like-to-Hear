@@ -3,6 +3,9 @@ import torch.nn as nn
 
 from typing import Optional
 
+from torch.nn.modules.module import T
+
+
 def _freeze_weights(network: nn.Module):
     for param in network.parameters():
         param.requires_grad = False
@@ -21,6 +24,7 @@ class CombinedPipeline(nn.Module):
 
         self.classifier = classifier
         _freeze_weights(self.classifier)
+        self.classifier.eval()  # freeze also layers with state such as BatchNorm
 
     def forward(self, input: torch.Tensor) -> torch.Tensor:
         reconstructed_input = self.autoencoder(input)
@@ -28,3 +32,11 @@ class CombinedPipeline(nn.Module):
 
         predicted_labels = self.classifier(reconstructed_input)
         return predicted_labels
+
+    def train(self: T, mode: bool = True) -> T:
+        self.autoencoder.train(mode)
+        return self
+
+    def eval(self: T) -> T:
+        self.autoencoder.eval()
+        return self
