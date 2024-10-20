@@ -71,9 +71,14 @@ class Trainer:
                 checkpoint_path = os.path.join(self.save_dir, f'checkpoint_epoch_{epoch}_losses_{train_loss:.4f}_{val_loss:.4f}_acc_{accuracy}.pth')
                 save_checkpoint(checkpoint_path, epoch, train_losses, val_losses, accuracies, model, optimizer, scheduler)
 
-            # Save best model
+            # Save best val-loss model
             if val_loss <= min(val_losses):
-                checkpoint_path = os.path.join(self.save_dir, f'best_model.pth')
+                checkpoint_path = os.path.join(self.save_dir, f'best_val_model.pth')
+                save_checkpoint(checkpoint_path, epoch, train_losses, val_losses, accuracies, model, optimizer, scheduler)
+
+            # Save best accuracy model
+            if accuracy >= max(accuracies):
+                checkpoint_path = os.path.join(self.save_dir, f'best_acc_model.pth')
                 save_checkpoint(checkpoint_path, epoch, train_losses, val_losses, accuracies, model, optimizer, scheduler)
 
         # save final model
