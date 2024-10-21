@@ -23,7 +23,7 @@ class Trainer:
         self.train_autoencoder = unsupervised_learning
 
     def train(self, num_epochs: int, model: nn.Module, train_loader: DataLoader, validation_loader: DataLoader,
-              optimizer: optim.Optimizer, criterion: nn.Module, scheduler: Optional[LRScheduler]=None, resume: Optional[str]=None):
+              optimizer: optim.Optimizer, criterion: nn.Module, scheduler: Optional[LRScheduler]=None, resume: Optional[str]=None, accumulation_steps: int=1):
         """
         Trains the model on the specified training and validation sets for the given number of epochs.
         :param num_epochs: Number of epochs to train the model.
@@ -55,7 +55,7 @@ class Trainer:
 
         print(f'=> Starting training for {num_epochs} epochs', f'starting from {start_epoch}' if start_epoch > 0 else '')
         for epoch in range(start_epoch, num_epochs):
-            train_loss = self._training_loop(epoch, model, train_loader, optimizer, criterion)
+            train_loss = self._training_loop(epoch, model, train_loader, optimizer, criterion, accumulation_steps)
             train_losses.append(train_loss)
 
             val_loss, accuracy = self._validation_loop(epoch, model, validation_loader, criterion)
@@ -86,7 +86,7 @@ class Trainer:
         save_checkpoint(checkpoint_path, num_epochs, train_losses, val_losses, accuracies, model, optimizer, scheduler)
 
 
-    def _training_loop(self, epoch: int, model: nn.Module, train_loader: DataLoader, optimizer: optim.Optimizer, criterion: nn.Module) -> float:
+    def _training_loop(self, epoch: int, model: nn.Module, train_loader: DataLoader, optimizer: optim.Optimizer, criterion: nn.Module, accumulation_steps: int) -> float:
         model.train()
         losses = []
 
@@ -97,12 +97,18 @@ class Trainer:
 
             outputs = model(inputs)
             loss = criterion(outputs, inputs) if self.train_autoencoder else criterion(outputs, labels)
+
+            # Compute mean loss adjusted to accumulation_steps and backprop.
+            mean_loss = loss.mean() / accumulation_steps
+            mean_loss.backward()
+
+            # Accumulate gradients until we either reached the end of the train_loader or we hit an accumulation-step intervall
+            if (idx + 1) % accumulation_steps == 0 or (idx + 1) == len(train_loader):
+                optimizer.step()
+                optimizer.zero_grad()
+                print('Weights updated!')
+
             losses.append(loss.detach().cpu().numpy())
-
-            optimizer.zero_grad()
-            loss.mean().backward()
-            optimizer.step()
-
             progress_bar.set_description(f'Epoch {epoch+1:02d} - Training loss: {np.stack(losses).mean():.4f}')
 
         losses = np.stack(losses)

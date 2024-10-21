@@ -43,6 +43,7 @@ def main(args: argparse.Namespace):
                         'criterion': criterion,
                         'scheduler': scheduler,
                         'resume': args.resume_checkpoint,
+                        'accumulation_steps': args.accumulation_steps
                         }
 
     model_trainer = Trainer(save_interval=args.save_interval, device=device, unsupervised_learning=args.unsupervised_learning)
@@ -66,6 +67,7 @@ if __name__ == '__main__':
 
     # Training params
     parser.add_argument('--num_epochs', type=int, default=100, help='Number of epochs')
+    parser.add_argument('--accumulation_steps', type=int, default=1, help='Steps for accumulating gradients')
     parser.add_argument('--lr', type=float, default=3e-5, help='Learning rate')
     parser.add_argument('--weight_decay', type=float, default=1e-5, help='Weight decay')
     parser.add_argument('--save_interval', type=int, default=5, help='Interval of saving checkpoints')
