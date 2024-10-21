@@ -89,6 +89,7 @@ class Trainer:
     def _training_loop(self, epoch: int, model: nn.Module, train_loader: DataLoader, optimizer: optim.Optimizer, criterion: nn.Module, accumulation_steps: int) -> float:
         model.train()
         losses = []
+        optimizer.zero_grad()  # through changed weight-update logic, call zero_grad before training to make sure we have no left-over gradients
 
         progress_bar = tqdm(train_loader)
         for idx, (inputs, labels) in enumerate(progress_bar, 1):
