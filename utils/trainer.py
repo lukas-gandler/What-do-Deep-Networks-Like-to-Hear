@@ -100,14 +100,14 @@ class Trainer:
             loss = criterion(outputs, inputs) if self.train_autoencoder else criterion(outputs, labels)
 
             # Compute mean loss adjusted to accumulation_steps and backprop.
-            mean_loss = loss.mean() / accumulation_steps
+            steps_to_accumulate = accumulation_steps if idx <= len(train_loader) // accumulation_steps * accumulation_steps else len(train_loader) % accumulation_steps  # account for incomplete batches at the end
+            mean_loss = loss.mean() / steps_to_accumulate
             mean_loss.backward()
 
             # Accumulate gradients until we either reached the end of the train_loader or we hit an accumulation-step intervall
-            if (idx + 1) % accumulation_steps == 0 or (idx + 1) == len(train_loader):
+            if idx % accumulation_steps == 0 or idx == len(train_loader):
                 optimizer.step()
                 optimizer.zero_grad()
-                print('Weights updated!')
 
             losses.append(loss.detach().cpu().numpy())
             progress_bar.set_description(f'Epoch {epoch+1:02d} - Training loss: {np.stack(losses).mean():.4f}')
