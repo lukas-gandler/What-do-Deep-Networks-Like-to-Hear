@@ -24,9 +24,9 @@ DATASET_CONFIG = {
     'num_classes': 50
 }
 
-def load_ESC50(batch_size: int=32, num_workers: int=1, load_mono: bool=True) -> tuple[DataLoader, DataLoader]:
-    train_set = get_training_set(resample_rate=32_000, roll=False, wav_mix=False, gain_augment=12, fold=1, load_mono=load_mono)
-    test_set = get_test_set(resample_rate=32_000, fold=1, load_mono=load_mono)
+def load_ESC50(batch_size: int=32, num_workers: int=1, load_mono: bool=True, fold: int=1) -> tuple[DataLoader, DataLoader]:
+    train_set = get_training_set(resample_rate=32_000, roll=False, wav_mix=False, gain_augment=12, fold=fold, load_mono=load_mono)
+    test_set = get_test_set(resample_rate=32_000, fold=fold, load_mono=load_mono)
 
     train_loader = DataLoader(train_set, batch_size=batch_size, shuffle=True, num_workers=num_workers, worker_init_fn=worker_init_fn, pin_memory=True)
     test_loader = DataLoader(test_set, batch_size=batch_size, shuffle=False, num_workers=num_workers, worker_init_fn=worker_init_fn, pin_memory=True)

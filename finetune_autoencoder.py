@@ -14,7 +14,7 @@ def main(args: argparse.Namespace):
 
     # Get DATASET
     print(f'=> Loading dataset')
-    train_loader, test_loader = load_ESC50(batch_size=args.batch_size, num_workers=args.num_workers, load_mono=args.load_mono)
+    train_loader, test_loader = load_ESC50(batch_size=args.batch_size, num_workers=args.num_workers, load_mono=args.load_mono, fold=args.fold)
 
     # Instantiate MODEL
     print(f'=> Building models and assembling pipeline')
@@ -60,6 +60,7 @@ if __name__ == '__main__':
     parser.add_argument('--batch_size', type=int, default=4, help='Batch size')
     parser.add_argument('--num_workers', type=int, default=4, help='Number of workers for data loading')
     parser.add_argument('--load_mono', action='store_true', default=False, help='Load mono audio')
+    parser.add_argument('--fold', type=int, default=1, help='Defines Test-Fold')
 
     # Pipeline params
     parser.add_argument('--finetune_encoder', action='store_true', default=False, help='Finetune encoder')
