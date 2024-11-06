@@ -18,9 +18,8 @@ def main(args: argparse.Namespace):
 
     # Instantiate MODEL
     print(f'=> Building models and assembling pipeline')
-    autoencoder = AudioAutoencoder(reduce_output=True).to(device)
-    classifier = get_mobilenet(checkpoint='models/pretrained_weights/ESC50_mn10_esc50_epoch_79_acc_960.pt').to(device)
-    # classifier = get_dynamic_mobilenet(checkpoint='models/pretrained_weights/ESC50_dymn10_esc50_epoch_79_acc_962.pt').to(device)
+    autoencoder = AudioAutoencoder(mono_output=False, keep_channel_dim=False).to(device)
+    classifier = get_classifier(args.model_name).to(device)
 
     # Assemble the autoencoder and classifier into the combined pipeline
     mel_transformation = MelTransform().to(device)
@@ -63,6 +62,7 @@ if __name__ == '__main__':
     parser.add_argument('--fold', type=int, default=1, help='Defines Test-Fold')
 
     # Pipeline params
+    parser.add_argument('--model_name', type=str, default='mn', help='Name of the classifier to use (only mn, dymn or passt are valid)')
     parser.add_argument('--finetune_encoder', action='store_true', default=False, help='Finetune encoder')
     parser.add_argument('--finetune_decoder', action='store_true', default=False, help='Finetune decoder')
 
@@ -75,5 +75,5 @@ if __name__ == '__main__':
     parser.add_argument('--unsupervised_learning', action='store_true', default=False, help='Unsupervised learning')
     parser.add_argument('--resume_checkpoint', type=str, default=None, help='Checkpoint path to resume training')
 
-    args = parser.parse_args()
-    main(args)
+    command_line_args = parser.parse_args()
+    main(command_line_args)
