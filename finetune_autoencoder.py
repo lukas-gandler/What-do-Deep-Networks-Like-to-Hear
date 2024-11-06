@@ -18,11 +18,11 @@ def main(args: argparse.Namespace):
 
     # Instantiate MODEL
     print(f'=> Building models and assembling pipeline')
-    autoencoder = AudioAutoencoder(mono_output=False, keep_channel_dim=False).to(device)
+    autoencoder = AudioAutoencoder(mono_output=True, keep_channel_dim=True).to(device)
     classifier = get_classifier(args.model_name).to(device)
 
     # Assemble the autoencoder and classifier into the combined pipeline
-    mel_transformation = MelTransform().to(device)
+    mel_transformation = MelTransform().to(device).eval()
     pipeline = CombinedPipeline(autoencoder=autoencoder, classifier=classifier, finetune_encoder=args.finetune_encoder, finetune_decoder=args.finetune_decoder, post_ae_transform=mel_transformation)
 
     num_params = sum(param.numel() for param in pipeline.parameters())
