@@ -10,7 +10,7 @@ from typing import Optional, Tuple
 from sklearn import metrics
 
 from torch.utils.data import DataLoader
-from torch.optim.lr_scheduler import LRScheduler, ReduceLROnPlateau
+from torch.optim.lr_scheduler import LRScheduler, ReduceLROnPlateau, OneCycleLR
 
 from .checkpointing import save_checkpoint, load_checkpoint
 from .number_of_correct import number_of_correct
@@ -39,7 +39,7 @@ class Trainer:
 
         model.to(self.device)
         if resume is not None:
-            print(f'=> resuming from checkpoint {resume}')
+            print(f'\n=> resuming from checkpoint {resume}')
 
             model, optimizer, scheduler, start_epoch, train_losses, val_losses, accuracies = load_checkpoint(resume, model, optimizer, scheduler)
             start_epoch = start_epoch + 1
@@ -47,7 +47,7 @@ class Trainer:
             train_losses, val_losses, accuracies = [], [], []
             start_epoch = 0
 
-            print(f'=> Initial testing of the model')
+            print(f'\n=> Initial testing of the model')
             val_loss, accuracy = self._validation_loop(0, model, validation_loader, criterion)
             val_losses.append(val_loss)
             accuracies.append(accuracy)
@@ -55,7 +55,7 @@ class Trainer:
 
         print(f'=> Starting training for {num_epochs} epochs', f'starting from {start_epoch}' if start_epoch > 0 else '')
         for epoch in range(start_epoch, num_epochs):
-            train_loss = self._training_loop(epoch, model, train_loader, optimizer, criterion, accumulation_steps)
+            train_loss = self._training_loop(epoch, model, train_loader, optimizer, scheduler, criterion, accumulation_steps)
             train_losses.append(train_loss)
 
             val_loss, accuracy = self._validation_loop(epoch, model, validation_loader, criterion)
@@ -63,7 +63,8 @@ class Trainer:
             accuracies.append(accuracy)
 
             # Step with scheduler
-            if scheduler is not None:
+            if scheduler is not None and not isinstance(scheduler, OneCycleLR):
+                print(f'hello from after-epoch step')
                 scheduler.step(val_loss) if isinstance(scheduler, ReduceLROnPlateau) else scheduler.step()
 
             # Save in intervals
@@ -86,7 +87,7 @@ class Trainer:
         save_checkpoint(checkpoint_path, num_epochs, train_losses, val_losses, accuracies, model, optimizer, scheduler)
 
 
-    def _training_loop(self, epoch: int, model: nn.Module, train_loader: DataLoader, optimizer: optim.Optimizer, criterion: nn.Module, accumulation_steps: int) -> float:
+    def _training_loop(self, epoch: int, model: nn.Module, train_loader: DataLoader, optimizer: optim.Optimizer, scheduler: Optional[LRScheduler], criterion: nn.Module, accumulation_steps: int) -> float:
         model.train()
         losses = []
         optimizer.zero_grad()  # through changed weight-update logic, call zero_grad before training to make sure we have no left-over gradients
@@ -108,6 +109,9 @@ class Trainer:
             if idx % accumulation_steps == 0 or idx == len(train_loader):
                 optimizer.step()
                 optimizer.zero_grad()
+
+                if isinstance(scheduler, OneCycleLR):
+                    scheduler.step()
 
             losses.append(loss.detach().cpu().numpy())
             progress_bar.set_description(f'Epoch {epoch+1:02d} - Training loss: {np.stack(losses).mean():.4f}')

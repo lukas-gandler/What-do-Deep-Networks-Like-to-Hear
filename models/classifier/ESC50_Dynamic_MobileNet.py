@@ -5,7 +5,7 @@ from functools import partial
 from typing import Any, Callable, List, Optional, Sequence, Tuple, Dict
 from torch import nn, Tensor
 import torch.nn.functional as F
-from torchvision.ops.misc import ConvNormActivation
+from torchvision.ops.misc import Conv2dNormActivation as ConvNormActivation
 from torch.hub import load_state_dict_from_url
 import urllib.parse
 
@@ -924,7 +924,7 @@ def _dymn(
         cls_in_state_dict = state_dict['classifier.5.weight'].shape[0]
         cls_in_current_model = model.classifier[5].out_features
         if cls_in_state_dict != cls_in_current_model:
-            print(f"The number of classes in the loaded state dict (={cls_in_state_dict}) and "
+            print(f"=> The number of classes in the loaded state dict (={cls_in_state_dict}) and "
                   f"the current model (={cls_in_current_model}) is not the same. Dropping final fully-connected layer "
                   f"and loading weights in non-strict mode!")
             del state_dict['classifier.5.weight']

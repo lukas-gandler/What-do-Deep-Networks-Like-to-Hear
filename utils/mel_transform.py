@@ -29,7 +29,7 @@ class AugmentMelSTFT(nn.Module):
         self.fmin = fmin
         if fmax is None:
             fmax = sr // 2 - fmax_aug_range // 2
-            print(f"Warning: FMAX is None setting to {fmax} ")
+            print(f"=> FMAX is None setting to {fmax} ")
         self.fmax = fmax
         self.hopsize = hopsize
         self.register_buffer('window',
@@ -52,8 +52,7 @@ class AugmentMelSTFT(nn.Module):
 
     def forward(self, x):
         x = nn.functional.conv1d(x.unsqueeze(1), self.preemphasis_coefficient).squeeze(1)
-        x = torch.stft(x, self.n_fft, hop_length=self.hopsize, win_length=self.win_length,
-                       center=True, normalized=False, window=self.window, return_complex=False)
+        x = torch.view_as_real(torch.stft(x, self.n_fft, hop_length=self.hopsize, win_length=self.win_length, center=True, normalized=False, window=self.window, return_complex=True))
         x = (x ** 2).sum(dim=-1)  # power mag
         fmin = self.fmin + torch.randint(self.fmin_aug_range, (1,)).item()
         fmax = self.fmax + self.fmax_aug_range // 2 - torch.randint(self.fmax_aug_range, (1,)).item()

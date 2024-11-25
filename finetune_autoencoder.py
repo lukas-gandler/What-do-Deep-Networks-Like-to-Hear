@@ -1,4 +1,6 @@
 import argparse
+from argparse import Namespace
+from typing import Optional
 
 import torch
 import torch.nn.functional as F
@@ -7,31 +9,55 @@ from models import *
 from utils import *
 from dataloading import *
 
+def get_lr_scheduler(scheduler: str, optimizer: torch.optim.Optimizer, args: Namespace) -> Optional[torch.optim.lr_scheduler.LRScheduler]:
+    match scheduler:
+        case 'cosine':
+            print("=> using cosine annealing")
+            return torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=args.num_epochs, eta_min=args.eta_min)
+
+        case 'plateau':
+            print("=> using plateau annealing")
+            return torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min', factor=args.factor, patience=args.patience)
+
+        case 'one_cycle':
+            print("=> using one_cycle annealing")
+            return torch.optim.lr_scheduler.OneCycleLR(optimizer, max_lr=args.max_lr, div_factor=args.div_factor, epochs=args.num_epochs, steps_per_epoch=1600 // (args.batch_size * args.accumulation_steps) + 1)
+
+        case 'step':
+            print("=> using step annealing")
+            return torch.optim.lr_scheduler.StepLR(optimizer, step_size=args.step_size, gamma=args.gamma)
+
+        case 'none':
+            print("=> not using an lr-scheduler")
+            return None
+
+
 def main(args: argparse.Namespace):
     # Get DEVICE
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     print(f'=> Using device {device}')
 
     # Get DATASET
-    print(f'=> Loading dataset')
+    print(f'\n=> Loading dataset')
     train_loader, test_loader = load_ESC50(batch_size=args.batch_size, num_workers=args.num_workers, load_mono=args.load_mono, fold=args.fold)
 
     # Instantiate MODEL
-    print(f'=> Building models and assembling pipeline')
+    print(f'\n=> Building models and assembling pipeline')
     autoencoder = AudioAutoencoder(mono_output=True, keep_channel_dim=True).to(device)
     classifier = get_classifier(args.model_name).to(device)
 
     # Assemble the autoencoder and classifier into the combined pipeline
-    mel_transformation = MelTransform().to(device).eval()
+    mel_transformation = MelTransform().to(device)
     pipeline = CombinedPipeline(autoencoder=autoencoder, classifier=classifier, finetune_encoder=args.finetune_encoder, finetune_decoder=args.finetune_decoder, post_ae_transform=mel_transformation)
 
     num_params = sum(param.numel() for param in pipeline.parameters())
     print(f'=> Successfully finished assembling pipeline - Total model params: {num_params:,}')
 
     # Define OPTIMIZER, LOSS-CRITERION and LR-SCHEDULER
-    optimizer = torch.optim.AdamW(pipeline.parameters(), lr=args.lr, weight_decay=args.weight_decay)
-    criterion = lambda prediction, target: F.cross_entropy(prediction, target, reduction='none')  # when we want to use Mix-Up we have to use one-hot vectors as targets
-    scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=args.num_epochs)
+    print(f'\n=> Setting-up training parameters')
+    optimizer = torch.optim.AdamW(pipeline.autoencoder.parameters(), lr=args.lr, weight_decay=args.weight_decay)
+    criterion = lambda prediction, target: F.cross_entropy(prediction, target, reduction='none')  # when we want to use Mix-Up we have to use one-hot vectors as targets, therefore need this lambda
+    scheduler = get_lr_scheduler(args.lr_scheduler, optimizer, args)
 
     # Create MODEL TRAINER and TRAIN MODEL
     training_configs = {'num_epochs': args.num_epochs,
@@ -47,13 +73,14 @@ def main(args: argparse.Namespace):
 
     model_trainer = Trainer(save_interval=args.save_interval, device=device, unsupervised_learning=args.unsupervised_learning)
     model_trainer.train(**training_configs)
-    print(f'=> Fine-tuning finished.')
+    print(f'\n=> Fine-tuning finished.')
 
-    print(f'=> Trained models saved under {model_trainer.save_dir}/')
+    print(f'\n=> Trained models saved under {model_trainer.save_dir}/')
     print(f'=> Done')
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Description of the arguments. ')
+
 
     # Data loading params
     parser.add_argument('--batch_size', type=int, default=4, help='Batch size')
@@ -61,10 +88,12 @@ if __name__ == '__main__':
     parser.add_argument('--load_mono', action='store_true', default=False, help='Load mono audio')
     parser.add_argument('--fold', type=int, default=1, help='Defines Test-Fold')
 
+
     # Pipeline params
-    parser.add_argument('--model_name', type=str, default='mn', help='Name of the classifier to use (only mn, dymn or passt are valid)')
+    parser.add_argument('--model_name', type=str, default='mn', choices=['mn', 'dymn', 'passt'], help='Name of the classifier to use (only mn, dymn or passt are valid)')
     parser.add_argument('--finetune_encoder', action='store_true', default=False, help='Finetune encoder')
     parser.add_argument('--finetune_decoder', action='store_true', default=False, help='Finetune decoder')
+
 
     # Training params
     parser.add_argument('--num_epochs', type=int, default=100, help='Number of epochs')
@@ -74,6 +103,18 @@ if __name__ == '__main__':
     parser.add_argument('--save_interval', type=int, default=5, help='Interval of saving checkpoints')
     parser.add_argument('--unsupervised_learning', action='store_true', default=False, help='Unsupervised learning')
     parser.add_argument('--resume_checkpoint', type=str, default=None, help='Checkpoint path to resume training')
+
+
+    # Scheduler params
+    parser.add_argument('--lr_scheduler', type=str, default='cosine', choices=['cosine', 'plateau', 'one_cycle', 'step', 'none'], help='Learning rate scheduler')
+    parser.add_argument('--eta_min', type=float, default=0.0, help='Minimum learning rate for CosineAnnealingLR')
+    parser.add_argument('--factor', type=float, default=0.1, help='Learning rate scheduler factor for ReduceOnPlateau')
+    parser.add_argument('--patience', type=int, default=5, help='Patience for ReduceOnPlateau')
+    parser.add_argument('--max_lr', type=float, default=1e-5, help='Maximum learning rate for OneCycleLR')
+    parser.add_argument('--div_factor', type=float, default=25.0, help='Div factor for OneCycleLR')
+    parser.add_argument('--step_size', type=int, default=10, help='Step size for StepLR')
+    parser.add_argument('--gamma', type=float, default=0.5, help='Gamma for StepLR')
+
 
     command_line_args = parser.parse_args()
     main(command_line_args)

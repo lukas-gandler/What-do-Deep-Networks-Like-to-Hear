@@ -6,7 +6,7 @@ from functools import partial
 from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple, Union
 from torch import nn, Tensor
 import torch.nn.functional as F
-from torchvision.ops.misc import ConvNormActivation
+from torchvision.ops.misc import Conv2dNormActivation as ConvNormActivation
 from torch.hub import load_state_dict_from_url
 import urllib.parse
 import math
@@ -602,7 +602,7 @@ def _mobilenet_v3(
             # drop the corresponding pre-trained part
             pretrain_logits = state_dict['classifier.5.bias'].size(0) if kwargs['head_type'] == "mlp" \
                 else state_dict['classifier.1.bias'].size(0)
-            print(f"Number of classes defined: {kwargs['num_classes']}, "
+            print(f"=> Number of classes defined: {kwargs['num_classes']}, "
                   f"but try to load pre-trained layer with logits: {pretrain_logits}\n"
                   "Dropping last layer.")
             if kwargs['head_type'] == "mlp":
@@ -613,8 +613,8 @@ def _mobilenet_v3(
         try:
             model.load_state_dict(state_dict)
         except RuntimeError as e:
-            print(str(e))
-            print("Loading weights pre-trained weights in a non-strict manner.")
+            # print(str(e))
+            # print("Loading weights pre-trained weights in a non-strict manner.")
             model.load_state_dict(state_dict, strict=False)
     elif pretrained_name:
         raise NotImplementedError(f"Model name '{pretrained_name}' unknown.")

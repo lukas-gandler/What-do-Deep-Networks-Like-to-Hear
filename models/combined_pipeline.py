@@ -41,8 +41,14 @@ class CombinedPipeline(nn.Module):
 
     def train(self: T, mode: bool = True) -> T:
         self.autoencoder.train(mode)
+        if self.post_ae_transform is not None:
+            self.post_ae_transform.train()
+
         return self
 
     def eval(self: T) -> T:
         self.autoencoder.eval()
+        if self.post_ae_transform is not None:
+            self.post_ae_transform.eval()
+        
         return self
