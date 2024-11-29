@@ -64,7 +64,6 @@ class Trainer:
 
             # Step with scheduler
             if scheduler is not None and not isinstance(scheduler, OneCycleLR):
-                print(f'hello from after-epoch step')
                 scheduler.step(val_loss) if isinstance(scheduler, ReduceLROnPlateau) else scheduler.step()
 
             # Save in intervals

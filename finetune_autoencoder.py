@@ -43,12 +43,12 @@ def main(args: argparse.Namespace):
 
     # Instantiate MODEL
     print(f'\n=> Building models and assembling pipeline')
-    autoencoder = AudioAutoencoder(mono_output=True, keep_channel_dim=True).to(device)
+    autoencoder = AudioAutoencoder(mono_output=True, keep_channel_dim=args.model_name != 'passt').to(device)
     classifier = get_classifier(args.model_name).to(device)
 
     # Assemble the autoencoder and classifier into the combined pipeline
     mel_transformation = MelTransform().to(device)
-    pipeline = CombinedPipeline(autoencoder=autoencoder, classifier=classifier, finetune_encoder=args.finetune_encoder, finetune_decoder=args.finetune_decoder, post_ae_transform=mel_transformation)
+    pipeline = CombinedPipeline(autoencoder=autoencoder, classifier=classifier, finetune_encoder=args.finetune_encoder, finetune_decoder=args.finetune_decoder, post_ae_transform=mel_transformation if args.model_name != 'passt' else None)
 
     num_params = sum(param.numel() for param in pipeline.parameters())
     print(f'=> Successfully finished assembling pipeline - Total model params: {num_params:,}')
