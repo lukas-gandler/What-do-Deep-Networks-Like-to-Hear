@@ -1,0 +1,12 @@
+numpy==2.0.1
+torch==2.4.0
+tqdm==4.66.5
+scikit-learn==1.5.2
+torchaudio==2.4.0
+hear21passt==0.0.26
+torchvision==0.19.0
+archisound==0.0.6
+librosa==0.10.2.post1
+pandas==2.2.3
+matplotlib==3.9.1.post1
+jupyter==1.1.1

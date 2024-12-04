@@ -12,10 +12,13 @@ def _freeze_weights(network: nn.Module):
 
 
 class CombinedPipeline(nn.Module):
-    def __init__(self, autoencoder: nn.Module, classifier: nn.Module, finetune_decoder: bool=True, finetune_encoder: bool=False, post_ae_transform: Optional[nn.Module]=None):
+    def __init__(self, autoencoder: nn.Module, classifier: nn.Module, finetune_decoder: bool=True, finetune_encoder: bool=True, post_ae_transform: Optional[nn.Module]=None):
         super(CombinedPipeline, self).__init__()
 
         self.post_ae_transform = post_ae_transform
+        if self.post_ae_transform is not None:
+            self.post_ae_transform.eval()
+
         self.autoencoder = autoencoder
 
         if not finetune_encoder:
@@ -41,14 +44,8 @@ class CombinedPipeline(nn.Module):
 
     def train(self: T, mode: bool = True) -> T:
         self.autoencoder.train(mode)
-        if self.post_ae_transform is not None:
-            self.post_ae_transform.train()
-
         return self
 
     def eval(self: T) -> T:
         self.autoencoder.eval()
-        if self.post_ae_transform is not None:
-            self.post_ae_transform.eval()
-        
         return self

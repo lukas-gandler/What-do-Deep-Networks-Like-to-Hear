@@ -47,7 +47,8 @@ def main(args: argparse.Namespace):
     classifier = get_classifier(args.model_name).to(device)
 
     # Assemble the autoencoder and classifier into the combined pipeline
-    mel_transformation = MelTransform().to(device)
+    # NOTE: PaSST has its mel-transformation already built in -> the pipeline handles setting the train- and eval-mode
+    mel_transformation = MelTransform().eval().to(device)
     pipeline = CombinedPipeline(autoencoder=autoencoder, classifier=classifier, finetune_encoder=args.finetune_encoder, finetune_decoder=args.finetune_decoder, post_ae_transform=mel_transformation if args.model_name != 'passt' else None)
 
     num_params = sum(param.numel() for param in pipeline.parameters())

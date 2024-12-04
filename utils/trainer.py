@@ -13,7 +13,6 @@ from torch.utils.data import DataLoader
 from torch.optim.lr_scheduler import LRScheduler, ReduceLROnPlateau, OneCycleLR
 
 from .checkpointing import save_checkpoint, load_checkpoint
-from .number_of_correct import number_of_correct
 
 class Trainer:
     def __init__(self, save_dir: str = 'checkpoints', save_interval: int=10, device: torch.device = 'cpu', unsupervised_learning=False):
