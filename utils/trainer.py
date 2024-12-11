@@ -15,11 +15,15 @@ from torch.optim.lr_scheduler import LRScheduler, ReduceLROnPlateau, OneCycleLR
 from .checkpointing import save_checkpoint, load_checkpoint
 
 class Trainer:
-    def __init__(self, save_dir: str = 'checkpoints', save_interval: int=10, device: torch.device = 'cpu', unsupervised_learning=False):
+    def __init__(self, save_dir: str = 'checkpoints', save_interval: int=10, device: torch.device = 'cpu', unsupervised_learning: bool=False, use_cross_validation: bool=False):
         self.save_dir = save_dir
         self.device = device
         self.save_interval = save_interval
         self.train_autoencoder = unsupervised_learning
+
+        self.use_cross_validation = use_cross_validation
+        if self.use_cross_validation:
+            print(f'=> Using Cross-Validation')
 
     def train(self, num_epochs: int, model: nn.Module, train_loader: DataLoader, validation_loader: DataLoader,
               optimizer: optim.Optimizer, criterion: nn.Module, scheduler: Optional[LRScheduler]=None, resume: Optional[str]=None, accumulation_steps: int=1):
@@ -65,6 +69,11 @@ class Trainer:
             if scheduler is not None and not isinstance(scheduler, OneCycleLR):
                 scheduler.step(val_loss) if isinstance(scheduler, ReduceLROnPlateau) else scheduler.step()
 
+            # update validation fold if we use cross-validation
+            if self.use_cross_validation:
+                train_loader.dataset.select_next_validation_fold()
+                # print(train_loader.dataset.validation_fold_idx)
+
             # Save in intervals
             if (epoch + 1) % self.save_interval == 0:
                 checkpoint_path = os.path.join(self.save_dir, f'checkpoint_epoch_{epoch}_losses_{train_loss:.5f}_{val_loss:.5f}_acc_{accuracy}.pth')
@@ -89,6 +98,10 @@ class Trainer:
         model.train()
         losses = []
         optimizer.zero_grad()  # through changed weight-update logic, call zero_grad before training to make sure we have no left-over gradients
+
+        if self.use_cross_validation:
+            train_loader.dataset.cv_train_mode()
+            # print(set(train_loader.dataset.df.fold))
 
         progress_bar = tqdm(train_loader)
         for idx, (inputs, labels) in enumerate(progress_bar, 1):
@@ -122,6 +135,10 @@ class Trainer:
     def _validation_loop(self, epoch: int, model: nn.Module, validation_loader: DataLoader, criterion: nn.Module) -> Tuple[float, float]:
         model.eval()
         losses, targets, predictions = [], [], []
+
+        if self.use_cross_validation:
+            validation_loader.dataset.cv_validation_mode()
+            # print(set(validation_loader.dataset.df.fold))
 
         progress_bar = tqdm(validation_loader)
         for idx, (inputs, labels) in enumerate(progress_bar, 1):

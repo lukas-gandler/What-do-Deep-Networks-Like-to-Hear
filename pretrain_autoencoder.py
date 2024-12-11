@@ -11,7 +11,7 @@ def main():
     print(f'=> Using device {device}')
 
     # Get DATASET
-    train_loader, test_loader = load_ESC50(batch_size=8, num_workers=4, load_mono=False, fold=1)
+    train_loader, _ = load_ESC50(batch_size=8, num_workers=4, load_mono=False, fold=1)
 
     # Load MODEL
     print(f'=> Loading autoencoder')
@@ -29,7 +29,7 @@ def main():
     training_configs = {
         'num_epochs': 100,
         'train_loader': train_loader,
-        'validation_loader': test_loader,
+        'validation_loader': train_loader,
         'model': autoencoder,
         'optimizer': optimizer,
         'criterion': criterion,
@@ -38,7 +38,7 @@ def main():
         'accumulation_steps': 16,
     }
 
-    model_trainer = Trainer(save_interval=5, device=device, unsupervised_learning=True)
+    model_trainer = Trainer(save_interval=5, device=device, unsupervised_learning=True, use_cross_validation=True)
     model_trainer.train(**training_configs)
     print(f'\n=> Fine-tuning finished')
 
