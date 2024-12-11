@@ -67,7 +67,7 @@ class Trainer:
 
             # Save in intervals
             if (epoch + 1) % self.save_interval == 0:
-                checkpoint_path = os.path.join(self.save_dir, f'checkpoint_epoch_{epoch}_losses_{train_loss:.4f}_{val_loss:.4f}_acc_{accuracy}.pth')
+                checkpoint_path = os.path.join(self.save_dir, f'checkpoint_epoch_{epoch}_losses_{train_loss:.5f}_{val_loss:.5f}_acc_{accuracy}.pth')
                 save_checkpoint(checkpoint_path, epoch, train_losses, val_losses, accuracies, model, optimizer, scheduler)
 
             # Save best val-loss model
@@ -112,7 +112,7 @@ class Trainer:
                     scheduler.step()
 
             losses.append(loss.detach().cpu().numpy())
-            progress_bar.set_description(f'Epoch {epoch+1:02d} - Training loss: {np.stack(losses).mean():.4f}')
+            progress_bar.set_description(f'Epoch {epoch+1:02d} - Training loss: {np.stack(losses).mean():.5f}')
 
         losses = np.stack(losses)
         return losses.mean()
@@ -133,15 +133,18 @@ class Trainer:
             losses.append(loss.cpu().numpy())
 
             if self.train_autoencoder:
-                progress_bar.set_description(f'-- Validation loss: {np.stack(losses).mean():.4f}')
+                progress_bar.set_description(f'-- Validation loss: {np.stack(losses).mean():.5f}')
             else:
                 targets.append(labels.cpu().numpy())
                 predictions.append(outputs.float().cpu().numpy())
 
                 accuracy = metrics.accuracy_score(np.concatenate(targets).argmax(axis=1), np.concatenate(predictions).argmax(axis=1))
-                progress_bar.set_description(f'-- Validation loss: {np.stack(losses).mean():.4f} | Accuracy: {accuracy:.4f}%')
+                progress_bar.set_description(f'-- Validation loss: {np.stack(losses).mean():.5f} | Accuracy: {accuracy:.4f}%')
 
         losses = np.stack(losses)
-        final_accuracy = metrics.accuracy_score(np.concatenate(targets).argmax(axis=1), np.concatenate(predictions).argmax(axis=1))
 
-        return losses.mean(), final_accuracy
+        if self.train_autoencoder:
+            return losses.mean(), 0.0
+        else:
+            final_accuracy = metrics.accuracy_score(np.concatenate(targets).argmax(axis=1), np.concatenate(predictions).argmax(axis=1))
+            return losses.mean(), final_accuracy
