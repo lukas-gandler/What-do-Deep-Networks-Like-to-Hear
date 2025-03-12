@@ -24,9 +24,9 @@ DATASET_CONFIG = {
     'num_classes': 50
 }
 
-def load_ESC50(batch_size: int=32, num_workers: int=1, load_mono: bool=True, fold: int=1) -> tuple[DataLoader, DataLoader]:
-    train_set = get_training_set(resample_rate=32_000, roll=False, wav_mix=False, gain_augment=12, fold=fold, load_mono=load_mono)
-    test_set = get_test_set(resample_rate=32_000, fold=fold, load_mono=load_mono)
+def load_ESC50(batch_size: int=32, num_workers: int=1, load_mono: bool=True, fold: int=1, transform=None) -> tuple[DataLoader, DataLoader]:
+    train_set = get_training_set(resample_rate=32_000, roll=False, wav_mix=False, gain_augment=12, fold=fold, load_mono=load_mono, transform=transform)
+    test_set = get_test_set(resample_rate=32_000, fold=fold, load_mono=load_mono, transform=transform)
 
     train_loader = DataLoader(train_set, batch_size=batch_size, shuffle=True, num_workers=num_workers, worker_init_fn=worker_init_fn, pin_memory=True)
     test_loader = DataLoader(test_set, batch_size=batch_size, shuffle=False, num_workers=num_workers, worker_init_fn=worker_init_fn, pin_memory=True)
@@ -68,7 +68,7 @@ def get_roll_func(axis=1, shift=None, shift_range=4_000):
 
 class AudioSetDataset(Dataset):
     def __init__(self, meta_csv: str, audio_path: str, fold: int, train: bool=False, resample_rate: int=32_000,
-                 classes_num: int=50, clip_length: int=5, gain_augment=0, load_mono:bool = True):
+                 classes_num: int=50, clip_length: int=5, gain_augment=0, load_mono:bool = True, transform=None):
         """
         Reads the mp3 bytes from HDF file decodes using av and returns a fixed length audio wav
         :param meta_csv: CSV file indicating classes
@@ -83,15 +83,16 @@ class AudioSetDataset(Dataset):
 
         self.resample_rate = resample_rate
         self.meta_csv = meta_csv
-        self.df = pd.read_csv(self.meta_csv)
+        self.dataset = pd.read_csv(self.meta_csv)
+        self.fold = fold
 
         if train:  # training all except this
-            print(f'=> Dataset training fold {fold} selection out of {len(self.df)}')
-            self.df = self.df[self.df.fold != fold]
+            print(f'=> Dataset training fold {self.fold} selection out of {len(self.dataset)}')
+            self.df = self.dataset[self.dataset.fold != self.fold]
             print(f'=>  for training remains {len(self.df)}')
         else:
-            print(f'=> Dataset testing fold {fold} selection out of {len(self.df)}')
-            self.df = self.df[self.df.fold == fold]
+            print(f'=> Dataset testing fold {self.fold} selection out of {len(self.dataset)}')
+            self.df = self.dataset[self.dataset.fold == self.fold]
             print(f'=>  for testing remains {len(self.df)}')
 
         self.clip_length = (clip_length * resample_rate) // 4 * 4  # make sure that the clip_length is multiple of 4
@@ -99,6 +100,13 @@ class AudioSetDataset(Dataset):
         self.gain_augment = gain_augment
         self.audio_path = audio_path
         self.load_mono = load_mono
+
+        # cross-validation
+        self.dataset_folds = list(set(self.df.fold))
+        self.validation_fold_idx = 0
+
+        # transforms
+        self.transform = transform
 
     def __len__(self):
         return len(self.df)
@@ -123,8 +131,38 @@ class AudioSetDataset(Dataset):
         target = np.zeros(self.classes_num)
         target[row.target] = 1
 
+        if self.transform is not None:
+            waveform = self.transform(torch.tensor(waveform))
+
         return waveform, target
 
+    def cv_train_mode(self):
+        """
+        Modify the dataset such that one of the training folds gets selected as the validation fold.
+        The selected validation fold then gets excluded from the training set.
+        :return:
+        """
+
+        validation_fold = self.dataset_folds[self.validation_fold_idx]
+        self.df = self.dataset[self.dataset.fold != self.fold]
+        self.df = self.df[self.df.fold != validation_fold]
+
+    def cv_validation_mode(self):
+        """
+        Modify the dataset such that only the current validation fold gets selected.
+        :return:
+        """
+
+        validation_fold = self.dataset_folds[self.validation_fold_idx]
+        self.df = self.dataset[self.dataset.fold == validation_fold]
+
+    def select_next_validation_fold(self):
+        """
+        Updates the current validation fold.
+        :return:
+        """
+
+        self.validation_fold_idx = (self.validation_fold_idx + 1) % len(self.dataset_folds)
 
 class PreprocessDataset(Dataset):
     """
@@ -182,22 +220,22 @@ class MixupDataset(Dataset):
 
 #endregion
 
-def get_base_training_set(resample_rate: int=32_000, gain_augment: int=0, fold: int=1, load_mono: bool=True) -> AudioSetDataset:
+def get_base_training_set(resample_rate: int=32_000, gain_augment: int=0, fold: int=1, load_mono: bool=True, transform=None) -> AudioSetDataset:
     meta_csv = DATASET_CONFIG['meta_csv']
     audio_path = DATASET_CONFIG['audio_path']
 
-    ds = AudioSetDataset(meta_csv, audio_path, fold, train=True, resample_rate=resample_rate, gain_augment=gain_augment, load_mono=load_mono)
+    ds = AudioSetDataset(meta_csv, audio_path, fold, train=True, resample_rate=resample_rate, gain_augment=gain_augment, load_mono=load_mono, transform=transform)
     return ds
 
-def get_base_test_set(resample_rate: int=32_000, fold: int=1, load_mono: bool=True) -> AudioSetDataset:
+def get_base_test_set(resample_rate: int=32_000, fold: int=1, load_mono: bool=True, transform=None) -> AudioSetDataset:
     meta_csv = DATASET_CONFIG['meta_csv']
     audio_path = DATASET_CONFIG['audio_path']
 
-    ds = AudioSetDataset(meta_csv, audio_path, fold, train=False, resample_rate=resample_rate, load_mono=load_mono)
+    ds = AudioSetDataset(meta_csv, audio_path, fold, train=False, resample_rate=resample_rate, load_mono=load_mono, transform=transform)
     return ds
 
-def get_training_set(resample_rate: int=32_000, roll: bool=False, wav_mix: bool=False, gain_augment: int=0, fold: int=1, load_mono: bool=True) -> Dataset:
-    ds = get_base_training_set(resample_rate=resample_rate, gain_augment=gain_augment, fold=fold, load_mono=load_mono)
+def get_training_set(resample_rate: int=32_000, roll: bool=False, wav_mix: bool=False, gain_augment: int=0, fold: int=1, load_mono: bool=True, transform=None) -> Dataset:
+    ds = get_base_training_set(resample_rate=resample_rate, gain_augment=gain_augment, fold=fold, load_mono=load_mono, transform=transform)
 
     if roll:
         ds = PreprocessDataset(ds, get_roll_func())
@@ -206,8 +244,8 @@ def get_training_set(resample_rate: int=32_000, roll: bool=False, wav_mix: bool=
 
     return ds
 
-def get_test_set(resample_rate: int=32_000, fold: int=1, load_mono: bool=True) -> AudioSetDataset:
-    ds = get_base_test_set(resample_rate, fold=fold, load_mono=load_mono)
+def get_test_set(resample_rate: int=32_000, fold: int=1, load_mono: bool=True, transform=None) -> AudioSetDataset:
+    ds = get_base_test_set(resample_rate, fold=fold, load_mono=load_mono, transform=transform)
     return ds
 
 

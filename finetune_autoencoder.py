@@ -1,9 +1,10 @@
 import argparse
 from argparse import Namespace
-from typing import Optional
+from typing import Optional, Tuple
 
 import torch
 import torch.nn.functional as F
+import torchaudio.transforms as audio_transforms
 
 from models import *
 from utils import *
@@ -31,25 +32,33 @@ def get_lr_scheduler(scheduler: str, optimizer: torch.optim.Optimizer, args: Nam
             print("=> not using an lr-scheduler")
             return None
 
+        case _:
+            raise RuntimeError(f'Unsupported scheduler {scheduler}')
 
-def main(args: argparse.Namespace):
+def main(args: argparse.Namespace) -> None:
     # Get DEVICE
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     print(f'=> Using device {device}')
 
     # Get DATASET
-    print(f'\n=> Loading dataset')
-    train_loader, test_loader = load_ESC50(batch_size=args.batch_size, num_workers=args.num_workers, load_mono=args.load_mono, fold=args.fold)
+    print(f'\n=> Loading dataset @ {args.sample_rate:,} HZ for autoencoder pre-processing')
+    load_transform = audio_transforms.Resample(orig_freq=32_000, new_freq=args.sample_rate)
+    train_loader, test_loader = load_ESC50(batch_size=args.batch_size, num_workers=args.num_workers, load_mono=args.load_mono, fold=args.fold, transform=load_transform)
 
     # Instantiate MODEL
     print(f'\n=> Building models and assembling pipeline')
-    autoencoder = AudioAutoencoder(mono_output=True, keep_channel_dim=args.model_name != 'passt').to(device)
+    autoencoder = get_autoencoder(args.autoencoder, keep_channel_dim=args.model_name != 'passt').to(device)
     classifier = get_classifier(args.model_name).to(device)
 
     # Assemble the autoencoder and classifier into the combined pipeline
+    post_ae_transforms = [ audio_transforms.Resample(orig_freq=args.sample_rate, new_freq=32_000).eval().to(device), ]
+
     # NOTE: PaSST has its mel-transformation already built in -> the pipeline handles setting the train- and eval-mode
-    mel_transformation = MelTransform().eval().to(device)
-    pipeline = CombinedPipeline(autoencoder=autoencoder, classifier=classifier, finetune_encoder=args.finetune_encoder, finetune_decoder=args.finetune_decoder, post_ae_transform=mel_transformation if args.model_name != 'passt' else None)
+    if args.model_name != 'passt':
+        mel_transformation = MelTransform().eval().to(device)
+        post_ae_transforms.append(mel_transformation)
+
+    pipeline = CombinedPipeline(autoencoder=autoencoder, classifier=classifier, finetune_encoder=args.finetune_encoder, finetune_decoder=args.finetune_decoder, post_ae_transform=post_ae_transforms)
 
     num_params = sum(param.numel() for param in pipeline.parameters())
     print(f'=> Successfully finished assembling pipeline - Total model params: {num_params:,}')
@@ -79,6 +88,7 @@ def main(args: argparse.Namespace):
     print(f'\n=> Trained models saved under {model_trainer.save_dir}/')
     print(f'=> Done')
 
+
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Description of the arguments. ')
 
@@ -91,7 +101,9 @@ if __name__ == '__main__':
 
 
     # Pipeline params
-    parser.add_argument('--model_name', type=str, default='mn', choices=['mn', 'dymn', 'passt'], help='Name of the classifier to use (only mn, dymn or passt are valid)')
+    parser.add_argument('--model_name', type=str, default='mn', choices=['mn', 'mn_rr1', 'mn_rr2', 'dymn', 'dymn_rr1', 'dymn_rr2', 'dymn_noCA', 'dymn_noDC', 'dymn_noDR', 'dymn_onlyCA', 'dymn_onlyDC', 'dymn_onlyDR', 'passt'], help='Name of the classifier to use (only mn, dymn or passt are valid)')
+    parser.add_argument('--autoencoder', type=str, default='esc-pretrained', choices=['esc-pretrained', 'archisound', 'random'], help='The Autoencoder version to use  for analysis')
+    parser.add_argument('--sample_rate', type=int, default=48_000, help='The sampling rate the autoencoder will work with. NOTE: The autoencoder is designed to work with 48kHZ.')
     parser.add_argument('--finetune_encoder', action='store_true', default=False, help='Finetune encoder')
     parser.add_argument('--finetune_decoder', action='store_true', default=False, help='Finetune decoder')
 
