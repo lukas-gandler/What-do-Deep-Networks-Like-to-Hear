@@ -4,6 +4,7 @@ import numpy as np
 import torch
 import torch.nn as nn
 import torch.optim as optim
+import torchaudio.transforms as T
 
 from tqdm import tqdm
 from typing import Optional, Tuple
@@ -15,15 +16,11 @@ from torch.optim.lr_scheduler import LRScheduler, ReduceLROnPlateau, OneCycleLR
 from .checkpointing import save_checkpoint, load_checkpoint
 
 class Trainer:
-    def __init__(self, save_dir: str = 'checkpoints', save_interval: int=10, device: torch.device = 'cpu', unsupervised_learning: bool=False, use_cross_validation: bool=False):
+    def __init__(self, save_dir: str = 'checkpoints', save_interval: int=10, device: torch.device = 'cpu', unsupervised_learning: bool=False):
         self.save_dir = save_dir
         self.device = device
         self.save_interval = save_interval
         self.train_autoencoder = unsupervised_learning
-
-        self.use_cross_validation = use_cross_validation
-        if self.use_cross_validation:
-            print(f'=> Using Cross-Validation')
 
     def train(self, num_epochs: int, model: nn.Module, train_loader: DataLoader, validation_loader: DataLoader,
               optimizer: optim.Optimizer, criterion: nn.Module, scheduler: Optional[LRScheduler]=None, resume: Optional[str]=None, accumulation_steps: int=1):
@@ -69,11 +66,6 @@ class Trainer:
             if scheduler is not None and not isinstance(scheduler, OneCycleLR):
                 scheduler.step(val_loss) if isinstance(scheduler, ReduceLROnPlateau) else scheduler.step()
 
-            # update validation fold if we use cross-validation
-            if self.use_cross_validation:
-                train_loader.dataset.select_next_validation_fold()
-                # print(train_loader.dataset.validation_fold_idx)
-
             # Save in intervals
             if (epoch + 1) % self.save_interval == 0:
                 checkpoint_path = os.path.join(self.save_dir, f'checkpoint_epoch_{epoch}_losses_{train_loss:.5f}_{val_loss:.5f}_acc_{accuracy}.pth')
@@ -81,16 +73,70 @@ class Trainer:
 
             # Save best val-loss model
             if val_loss <= min(val_losses):
-                checkpoint_path = os.path.join(self.save_dir, f'best_val_model.pth')
+                checkpoint_path = os.path.join(self.save_dir, f'{epoch}_best_val_model.pth')
                 save_checkpoint(checkpoint_path, epoch, train_losses, val_losses, accuracies, model, optimizer, scheduler)
 
             # Save best accuracy model
             if accuracy >= max(accuracies):
-                checkpoint_path = os.path.join(self.save_dir, f'best_acc_model.pth')
+                checkpoint_path = os.path.join(self.save_dir, f'{epoch}_best_acc_model.pth')
                 save_checkpoint(checkpoint_path, epoch, train_losses, val_losses, accuracies, model, optimizer, scheduler)
 
         # save final model
         checkpoint_path = os.path.join(self.save_dir, f'final_model.pth')
+        save_checkpoint(checkpoint_path, num_epochs, train_losses, val_losses, accuracies, model, optimizer, scheduler)
+
+    def train_cross_validation(self, fold: int, num_epochs: int, model: nn.Module, dataloader: DataLoader,
+              optimizer: optim.Optimizer, criterion: nn.Module, scheduler: Optional[LRScheduler]=None, resume: Optional[str]=None, accumulation_steps: int=1):
+
+        model.to(self.device)
+        if resume is not None:
+            print(f'\n=> resuming from checkpoint {resume}')
+
+            model, optimizer, scheduler, start_epoch, train_losses, val_losses, accuracies = load_checkpoint(resume, model, optimizer, scheduler)
+            start_epoch = start_epoch + 1
+        else:
+            train_losses, val_losses, accuracies = [], [], []
+            start_epoch = 0
+
+            print(f'\n=> Fold {fold} Initial testing of the model')
+            dataloader.dataset.cv_validation_mode()
+            val_loss, accuracy = self._validation_loop(0, model, dataloader, criterion)
+            val_losses.append(val_loss)
+            accuracies.append(accuracy)
+
+
+        print(f'=> Fold {fold} - Starting training for {num_epochs} epochs', f'starting from {start_epoch}' if start_epoch > 0 else '')
+        for epoch in range(start_epoch, num_epochs):
+            dataloader.dataset.cv_train_mode()
+            train_loss = self._training_loop(epoch, model, dataloader, optimizer, scheduler, criterion, accumulation_steps)
+            train_losses.append(train_loss)
+
+            dataloader.dataset.cv_validation_mode()
+            val_loss, accuracy = self._validation_loop(epoch, model, dataloader, criterion)
+            val_losses.append(val_loss)
+            accuracies.append(accuracy)
+
+            # Step with scheduler
+            if scheduler is not None and not isinstance(scheduler, OneCycleLR):
+                scheduler.step(val_loss) if isinstance(scheduler, ReduceLROnPlateau) else scheduler.step()
+
+            # Save in intervals
+            if (epoch + 1) % self.save_interval == 0:
+                checkpoint_path = os.path.join(self.save_dir, f'f{fold}_checkpoint_epoch_{epoch}_losses_{train_loss:.5f}_{val_loss:.5f}_acc_{accuracy}.pth')
+                save_checkpoint(checkpoint_path, epoch, train_losses, val_losses, accuracies, model, optimizer, scheduler)
+
+            # Save best val-loss model
+            if val_loss <= min(val_losses):
+                checkpoint_path = os.path.join(self.save_dir, f'f{fold}_{epoch}_best_val_model.pth')
+                save_checkpoint(checkpoint_path, epoch, train_losses, val_losses, accuracies, model, optimizer, scheduler)
+
+            # Save best accuracy model
+            if accuracy >= max(accuracies) and not self.train_autoencoder:
+                checkpoint_path = os.path.join(self.save_dir, f'f{fold}_{epoch}_best_acc_model.pth')
+                save_checkpoint(checkpoint_path, epoch, train_losses, val_losses, accuracies, model, optimizer, scheduler)
+
+        # save final model
+        checkpoint_path = os.path.join(self.save_dir, f'f{fold}_{val_losses[-1]:.5f}_final_model.pth')
         save_checkpoint(checkpoint_path, num_epochs, train_losses, val_losses, accuracies, model, optimizer, scheduler)
 
 
@@ -98,10 +144,6 @@ class Trainer:
         model.train()
         losses = []
         optimizer.zero_grad()  # through changed weight-update logic, call zero_grad before training to make sure we have no left-over gradients
-
-        if self.use_cross_validation:
-            train_loader.dataset.cv_train_mode()
-            # print(set(train_loader.dataset.df.fold))
 
         progress_bar = tqdm(train_loader)
         for idx, (inputs, labels) in enumerate(progress_bar, 1):
@@ -135,10 +177,6 @@ class Trainer:
     def _validation_loop(self, epoch: int, model: nn.Module, validation_loader: DataLoader, criterion: nn.Module) -> Tuple[float, float]:
         model.eval()
         losses, targets, predictions = [], [], []
-
-        if self.use_cross_validation:
-            validation_loader.dataset.cv_validation_mode()
-            # print(set(validation_loader.dataset.df.fold))
 
         progress_bar = tqdm(validation_loader)
         for idx, (inputs, labels) in enumerate(progress_bar, 1):

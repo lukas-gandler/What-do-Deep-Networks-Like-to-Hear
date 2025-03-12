@@ -1015,9 +1015,9 @@ def get_model(num_classes: int = 527,
     return m
 #endregion
 
-def get_dynamic_mobilenet(model_name: str='dymn10_as', pretrain_final_temp: float=1.0, checkpoint: str=None) -> DyMN:
+def get_dynamic_mobilenet(model_name: str='dymn10_as', pretrain_final_temp: float=1.0, checkpoint: str=None, no_dyrelu=False, no_dyconv=False, no_ca=False) -> DyMN:
     width = NAME_TO_WIDTH(model_name)
-    model = get_model(width_mult=width, pretrained_name=model_name, pretrain_final_temp=pretrain_final_temp, num_classes=50)
+    model = get_model(width_mult=width, pretrained_name=model_name, pretrain_final_temp=pretrain_final_temp, num_classes=50, no_dyrelu=no_dyrelu, no_dyconv=no_dyconv, no_ca=no_ca)
 
     if checkpoint is not None:
         print(f'=> Loading checkpoint {checkpoint}')
